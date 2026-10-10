@@ -257,7 +257,11 @@ function rResumo() {
   const fxPag = sum(S.fixas.filter(f => S.fpag[`${f.id}_${m}`]), f => valorEm(f, m));
   const { tot, ant } = totaisMes(m);
   const rm = S.ress.filter(r => r.data.startsWith(m));
+  const ressMes = r2(sum(rm, r => r.valor));
   const saldoRess = sum(S.ress.filter(r => r.rec && !r.ret), r => r.valor);
+  const abertas = S.parc.filter(c => !c.arq);
+  const qtdAbertas = abertas.length;
+  const devedor = r2(sum(abertas, c => sum(parcelas(c).filter(p => p.st !== 'paga'), p => p.v)));
   $('t-resumo').innerHTML =
     card(`Despesas fixas – ${lbl(m)}`, [['Total', brl(fxTot)], ['Pago', brl(fxPag)], ['Pendente', brl(fxTot - fxPag), 'text-red-600']]) +
     card(`Parcelas – ${lbl(m)}`, [['Total do mês', brl(tot)], ['Antecipado (poupança)', brl(ant), 'text-blue-700'], ['A pagar com salário', brl(tot - ant)]]) +
