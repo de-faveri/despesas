@@ -55,52 +55,16 @@ service cloud.firestore {
     <section id="t-resumo" class="sec grid gap-3 md:grid-cols-2"></section>
 
     <!-- FIXAS -->
-    // ---------- FIXAS ----------
-// valor vigente no mês: último reajuste feito até aquele mês
-const valorEm = (f, m) => {
-  const h = f.hist || {};
-  const k = Object.keys(h).filter(x => x <= m).sort().pop();
-  return k ? h[k] : f.valor;
-};
-$('fFixa').onsubmit = async e => {
-  e.preventDefault(); const f = e.target, m = mes();
-  const desc = fv(f, 'desc').trim(), valor = +fv(f, 'valor'), dia = +fv(f, 'dia') || null;
-  const id = fv(f, 'eid');
-  if (id) {
-    const x = S.fixas.find(i => i.id === id);
-    if (valorEm(x, m) !== valor && !confirm(`Novo valor ${brl(valor)} vale a partir de ${lbl(m)}. Os meses anteriores continuam iguais. Confirmar?`)) return;
-    await updateDoc(ref('fixas', id), { desc, dia, hist: { ...(x.hist || {}), [m]: valor } });
-  } else await addDoc(col('fixas'), { desc, dia, valor, hist: { [m]: valor } });
-  f.reset(); f.elements.eid.value = '';
-};
-function rFixas() {
-  const m = mes();
-  const l = [...S.fixas].sort((a, b) => (a.dia || 99) - (b.dia || 99));
-  $('lFixas').innerHTML = `<h3 class="font-bold mb-2">Pagamentos de ${lbl(m)}</h3>
-  <table class="w-full text-sm"><tr><th>Pago</th><th>Dia</th><th>Descrição</th><th>Valor</th><th></th></tr>
-  ${l.map(f => {
-    const pg = S.fpag[`${f.id}_${m}`], v = valorEm(f, m), ant = valorEm(f, addM(m, -1));
-    const var_ = v !== ant ? `<span class="text-xs ${v > ant ? 'text-red-600' : 'text-green-700'}"> ${v > ant ? '▲' : '▼'} antes ${brl(ant)}</span>` : '';
-    return `<tr><td class="text-center"><input type="checkbox" data-fp="${f.id}" ${pg ? 'checked' : ''}></td>
-    <td>${f.dia || ''}</td><td class="${pg ? 'line-through text-slate-400' : ''}">${esc(f.desc)}</td><td>${brl(v)}${var_}</td>
-    <td><button data-fe="${f.id}">✏️</button> <button data-fd="${f.id}">🗑️</button></td></tr>`;
-  }).join('')}
-  <tr class="font-bold"><td colspan="3">TOTAL</td><td>${brl(sum(l, f => valorEm(f, m)))}</td><td></td></tr></table>`;
-}
-$('lFixas').onclick = async e => {
-  const t = e.target, m = mes(), f = $('fFixa');
-  if (t.dataset.fp) {
-    const k = `${t.dataset.fp}_${m}`;
-    t.checked ? await setDoc(ref('fpag', k), { pago: true, em: new Date().toISOString() }) : await deleteDoc(ref('fpag', k));
-  }
-  if (t.dataset.fe) {
-    const x = S.fixas.find(i => i.id === t.dataset.fe);
-    f.elements.eid.value = x.id; f.elements.desc.value = x.desc; f.elements.valor.value = valorEm(x, m); f.elements.dia.value = x.dia || '';
-    f.scrollIntoView();
-  }
-  if (t.dataset.fd && confirm('Excluir despesa fixa?')) await deleteDoc(ref('fixas', t.dataset.fd));
-};
-
+    <section id="t-fixas" class="sec hidden">
+      <form id="fFixa" class="bg-white p-3 rounded shadow flex flex-wrap gap-2 mb-3">
+        <input type="hidden" name="eid">
+        <input name="desc" placeholder="Descrição" class="inp flex-1" required>
+        <input name="valor" type="number" step="0.01" placeholder="Valor" class="inp w-28" required>
+        <input name="dia" type="number" min="1" max="31" placeholder="Dia venc." class="inp w-24">
+        <button class="btn">Salvar</button>
+      </form>
+      <div id="lFixas" class="bg-white p-3 rounded shadow overflow-x-auto"></div>
+    </section>
 
     <!-- RESSARCIMENTOS -->
     <section id="t-ress" class="sec hidden">
@@ -236,8 +200,8 @@ function card(t, linhas) {
 }
 function rResumo() {
   const m = mes();
-  const fxTot = sum(S.fixas, f => f.valor);
-  const fxPag = sum(S.fixas.filter(f => S.fpag[`${f.id}_${m}`]), f => f.valor);
+  const fxTot = sum(S.fixas, f => valorEm(f, m));
+  const fxPag = sum(S.fixas.filter(f => S.fpag[`${f.id}_${m}`]), f => valorEm(f, m));
   const { tot, ant } = totaisMes(m);
   const rm = S.ress.filter(r => r.data.startsWith(m));
   const saldoRess = sum(S.ress.filter(r => r.rec && !r.ret), r => r.valor);
@@ -249,11 +213,21 @@ function rResumo() {
 }
 
 // ---------- FIXAS ----------
+// valor vigente no mês: último reajuste feito até aquele mês
+const valorEm = (f, m) => {
+  const h = f.hist || {};
+  const k = Object.keys(h).filter(x => x <= m).sort().pop();
+  return k ? h[k] : f.valor;
+};
 $('fFixa').onsubmit = async e => {
-  e.preventDefault(); const f = e.target;
-  const d = { desc: fv(f, 'desc').trim(), valor: +fv(f, 'valor'), dia: +fv(f, 'dia') || null };
+  e.preventDefault(); const f = e.target, m = mes();
+  const desc = fv(f, 'desc').trim(), valor = +fv(f, 'valor'), dia = +fv(f, 'dia') || null;
   const id = fv(f, 'eid');
-  id ? await updateDoc(ref('fixas', id), d) : await addDoc(col('fixas'), d);
+  if (id) {
+    const x = S.fixas.find(i => i.id === id);
+    if (valorEm(x, m) !== valor && !confirm(`Novo valor ${brl(valor)} vale a partir de ${lbl(m)}. Os meses anteriores continuam iguais. Confirmar?`)) return;
+    await updateDoc(ref('fixas', id), { desc, dia, hist: { ...(x.hist || {}), [m]: valor } });
+  } else await addDoc(col('fixas'), { desc, dia, valor, hist: { [m]: valor } });
   f.reset(); f.elements.eid.value = '';
 };
 function rFixas() {
@@ -262,12 +236,13 @@ function rFixas() {
   $('lFixas').innerHTML = `<h3 class="font-bold mb-2">Pagamentos de ${lbl(m)}</h3>
   <table class="w-full text-sm"><tr><th>Pago</th><th>Dia</th><th>Descrição</th><th>Valor</th><th></th></tr>
   ${l.map(f => {
-    const pg = S.fpag[`${f.id}_${m}`];
+    const pg = S.fpag[`${f.id}_${m}`], v = valorEm(f, m), ant = valorEm(f, addM(m, -1));
+    const var_ = v !== ant ? `<span class="text-xs ${v > ant ? 'text-red-600' : 'text-green-700'}"> ${v > ant ? '▲' : '▼'} antes ${brl(ant)}</span>` : '';
     return `<tr><td class="text-center"><input type="checkbox" data-fp="${f.id}" ${pg ? 'checked' : ''}></td>
-    <td>${f.dia || ''}</td><td class="${pg ? 'line-through text-slate-400' : ''}">${esc(f.desc)}</td><td>${brl(f.valor)}</td>
+    <td>${f.dia || ''}</td><td class="${pg ? 'line-through text-slate-400' : ''}">${esc(f.desc)}</td><td>${brl(v)}${var_}</td>
     <td><button data-fe="${f.id}">✏️</button> <button data-fd="${f.id}">🗑️</button></td></tr>`;
   }).join('')}
-  <tr class="font-bold"><td colspan="3">TOTAL</td><td>${brl(sum(l, f => f.valor))}</td><td></td></tr></table>`;
+  <tr class="font-bold"><td colspan="3">TOTAL</td><td>${brl(sum(l, f => valorEm(f, m)))}</td><td></td></tr></table>`;
 }
 $('lFixas').onclick = async e => {
   const t = e.target, m = mes(), f = $('fFixa');
@@ -277,7 +252,7 @@ $('lFixas').onclick = async e => {
   }
   if (t.dataset.fe) {
     const x = S.fixas.find(i => i.id === t.dataset.fe);
-    f.elements.eid.value = x.id; f.elements.desc.value = x.desc; f.elements.valor.value = x.valor; f.elements.dia.value = x.dia || '';
+    f.elements.eid.value = x.id; f.elements.desc.value = x.desc; f.elements.valor.value = valorEm(x, m); f.elements.dia.value = x.dia || '';
     f.scrollIntoView();
   }
   if (t.dataset.fd && confirm('Excluir despesa fixa?')) await deleteDoc(ref('fixas', t.dataset.fd));
