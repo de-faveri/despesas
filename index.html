@@ -323,7 +323,8 @@ function rParc() {
   $('lParc').innerHTML = `<table>
   <tr><th class="stk">Compra</th><th>Cartão</th>${meses.map(m => `<th>${lbl(m)}<br><button data-pay="${m}" class="text-xs bg-white text-green-800 rounded px-1">✓ pagar</button></th>`).join('')}<th>Ações</th></tr>
   ${ativas.map(c => {
-    const ps = parcelas(c), pagas = ps.filter(p => p.st === 'paga').length;
+    //const ps = parcelas(c), pagas = ps.filter(p => p.st === 'paga').length;
+    const ps = parcelas(c), pagas = ps.find(p => p.st !== 'paga')?.n || c.qtd;
     return `<tr><td class="stk">${esc(c.desc)} <span class="text-xs text-slate-500">${pagas}/${c.qtd}${c.data ? ' · ' + c.data.split('-').reverse().join('/') : ''}</span></td><td>${esc(c.cartao)}</td>
     ${meses.map(m => {
       const p = ps.find(x => x.ym === m);
