@@ -21,16 +21,17 @@ service cloud.firestore {
   .btn{background:#15803d;color:#fff;border-radius:6px;padding:4px 12px}
   .tab.on{border-bottom:3px solid #15803d;font-weight:600}
   table{border-collapse:collapse}
-  th,td{border:1px solid #e2e8f0;padding:3px 6px;white-space:nowrap}
-  th{background:#548235;color:#fff}
-  .stk{position:sticky;left:0;background:#f0fdf4;z-index:1}
-  th.stk{background:#548235}
+  th,td{border:1px solid #334155;padding:3px 6px;white-space:nowrap}
+  th{background:#166534;color:#fff}
+  .stk{position:sticky;left:0;background:#1e293b;z-index:1}
+  th.stk{background:#166534}
   .cell{cursor:pointer}
-  .antec{background:#9ec5fe!important}
-  tr:nth-child(even) td{background:#f0fdf4}
+  .cell:hover{outline:1px solid #4ade80}
+  .antec{background:#1e40af!important;color:#fff}
+  tr:nth-child(even) td{background:#172033}
 </style>
 </head>
-<body class="bg-slate-100 text-slate-800">
+<body class="bg-slate-900 text-slate-100">
 
 <div id="login" class="hidden min-h-screen flex items-center justify-center">
   <button id="btnLogin" class="btn text-lg px-6 py-3">Entrar com Google</button>
@@ -39,7 +40,12 @@ service cloud.firestore {
 <div id="app" class="hidden">
   <header class="bg-green-800 text-white p-3 flex flex-wrap gap-2 items-center">
     <b class="mr-auto">💰 Minhas Finanças</b>
-    <input type="month" id="mesSel" class="inp text-black">
+    <div class="flex items-center gap-1">
+      <button id="mPrev" class="nav-m" title="Mês anterior">◀</button>
+      <input type="month" id="mesSel" class="inp">
+      <button id="mNext" class="nav-m" title="Próximo mês">▶</button>
+      <button id="mHoje" class="nav-m text-sm">Hoje</button>
+    </div>
     <button id="btnSair" class="text-sm underline">Sair</button>
   </header>
   <nav class="flex overflow-x-auto bg-white shadow text-sm">
@@ -117,12 +123,7 @@ import { getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, on
 
 // ====== COLE AQUI A CONFIGURAÇÃO DO SEU PROJETO FIREBASE ======
 const firebaseConfig = {
-  apiKey: "AIzaSyB4jufE-ow3ZRqzktdNcDCeRljNlJqIj1g",
-  authDomain: "controle-despesas-2026.firebaseapp.com",
-  projectId: "controle-despesas-2026",
-  storageBucket: "controle-despesas-2026.firebasestorage.app",
-  messagingSenderId: "111496542553",
-  appId: "1:111496542553:web:5c9e89992cb64cf5c07448"
+  apiKey: "", authDomain: "", projectId: "", storageBucket: "", messagingSenderId: "", appId: ""
 };
 // ===============================================================
 
@@ -187,6 +188,15 @@ onAuthStateChanged(auth, u => {
 const hoje = new Date();
 $('mesSel').value = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
 $('mesSel').onchange = render;
+const irMes = n => { $('mesSel').value = n === 0 ? `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}` : addM(mes(), n); render(); };
+$('mPrev').onclick = () => irMes(-1);
+$('mNext').onclick = () => irMes(1);
+$('mHoje').onclick = () => irMes(0);
+document.addEventListener('keydown', e => {
+  if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
+  if (e.key === 'ArrowLeft') irMes(-1);
+  if (e.key === 'ArrowRight') irMes(1);
+});
 document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === b));
   document.querySelectorAll('.sec').forEach(s => s.classList.toggle('hidden', s.id !== 't-' + b.dataset.tab));
@@ -323,7 +333,6 @@ function rParc() {
   $('lParc').innerHTML = `<table>
   <tr><th class="stk">Compra</th><th>Cartão</th>${meses.map(m => `<th>${lbl(m)}<br><button data-pay="${m}" class="text-xs bg-white text-green-800 rounded px-1">✓ pagar</button></th>`).join('')}<th>Ações</th></tr>
   ${ativas.map(c => {
-    //const ps = parcelas(c), pagas = ps.filter(p => p.st === 'paga').length;
     const ps = parcelas(c), pagas = ps.find(p => p.st !== 'paga')?.n || c.qtd;
     return `<tr><td class="stk">${esc(c.desc)} <span class="text-xs text-slate-500">${pagas}/${c.qtd}${c.data ? ' · ' + c.data.split('-').reverse().join('/') : ''}</span></td><td>${esc(c.cartao)}</td>
     ${meses.map(m => {
