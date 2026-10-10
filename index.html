@@ -90,6 +90,7 @@ service cloud.firestore {
         <input name="cartao" placeholder="Cartão" class="inp w-32" value="CAIXA">
         <input name="total" type="number" step="0.01" placeholder="Valor total" class="inp w-32" required>
         <input name="qtd" type="number" min="1" placeholder="Parcelas" class="inp w-24" required>
+        <label class="text-sm flex items-center gap-1">Data da compra <input name="data" type="date" class="inp" required></label>
         <label class="text-sm flex items-center gap-1">1ª parcela <input name="ini" type="month" class="inp" required></label>
         <button class="btn">Salvar</button>
         <button type="button" id="cancParc" class="text-sm underline hidden">cancelar edição</button>
@@ -115,12 +116,7 @@ import { getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, on
 
 // ====== COLE AQUI A CONFIGURAÇÃO DO SEU PROJETO FIREBASE ======
 const firebaseConfig = {
-  apiKey: "AIzaSyB4jufE-ow3ZRqzktdNcDCeRljNlJqIj1g",
-  authDomain: "controle-despesas-2026.firebaseapp.com",
-  projectId: "controle-despesas-2026",
-  storageBucket: "controle-despesas-2026.firebasestorage.app",
-  messagingSenderId: "111496542553",
-  appId: "1:111496542553:web:5c9e89992cb64cf5c07448"
+  apiKey: "", authDomain: "", projectId: "", storageBucket: "", messagingSenderId: "", appId: ""
 };
 // ===============================================================
 
@@ -286,9 +282,10 @@ $('lRess').onclick = async e => {
 
 // ---------- PARCELADAS ----------
 const fP = $('fParc');
+fP.elements.data.onchange = () => { const d = fv(fP, 'data'); if (d) fP.elements.ini.value = addM(d.slice(0, 7), 1); };
 fP.onsubmit = async e => {
   e.preventDefault();
-  const d = { desc: fv(fP, 'desc').trim(), cartao: fv(fP, 'cartao').trim(), total: +fv(fP, 'total'), qtd: +fv(fP, 'qtd'), ini: fv(fP, 'ini') };
+  const d = { desc: fv(fP, 'desc').trim(), cartao: fv(fP, 'cartao').trim(), total: +fv(fP, 'total'), qtd: +fv(fP, 'qtd'), ini: fv(fP, 'ini'), data: fv(fP, 'data') };
   const id = fv(fP, 'eid');
   if (id) {
     const old = S.parc.find(x => x.id === id), st = {};
@@ -309,7 +306,7 @@ function rParc() {
   <tr><th class="stk">Compra</th><th>Cartão</th>${meses.map(m => `<th>${lbl(m)}<br><button data-pay="${m}" class="text-xs bg-white text-green-800 rounded px-1">✓ pagar</button></th>`).join('')}<th>Ações</th></tr>
   ${ativas.map(c => {
     const ps = parcelas(c), pagas = ps.filter(p => p.st === 'paga').length;
-    return `<tr><td class="stk">${esc(c.desc)} <span class="text-xs text-slate-500">${pagas}/${c.qtd}</span></td><td>${esc(c.cartao)}</td>
+    return `<tr><td class="stk">${esc(c.desc)} <span class="text-xs text-slate-500">${pagas}/${c.qtd}${c.data ? ' · ' + c.data.split('-').reverse().join('/') : ''}</span></td><td>${esc(c.cartao)}</td>
     ${meses.map(m => {
       const p = ps.find(x => x.ym === m);
       if (!p || p.st === 'paga') return '<td></td>';
@@ -342,7 +339,7 @@ $('lParc').onclick = async e => {
   }
   if (t.dataset.pe) {
     const c = S.parc.find(x => x.id === t.dataset.pe);
-    ['desc', 'cartao', 'total', 'qtd', 'ini'].forEach(k => fP.elements[k].value = c[k]);
+    ['desc', 'cartao', 'total', 'qtd', 'ini', 'data'].forEach(k => fP.elements[k].value = c[k] ?? '');
     fP.elements.eid.value = c.id; $('cancParc').classList.remove('hidden'); fP.scrollIntoView();
   }
   if (t.dataset.pd && confirm('Excluir compra parcelada?')) await deleteDoc(ref('parc', t.dataset.pd));
