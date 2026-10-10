@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<!--
+REGRAS DO FIRESTORE (cole em Firestore > Regras):
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}
+-->
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Minhas Finanças</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  .inp{border:1px solid #cbd5e1;border-radius:6px;padding:4px 8px}
+  .btn{background:#15803d;color:#fff;border-radius:6px;padding:4px 12px}
+  .tab.on{border-bottom:3px solid #15803d;font-weight:600}
+  table{border-collapse:collapse}
+  th,td{border:1px solid #e2e8f0;padding:3px 6px;white-space:nowrap}
+  th{background:#548235;color:#fff}
+  .stk{position:sticky;left:0;background:#f0fdf4;z-index:1}
+  th.stk{background:#548235}
+  .cell{cursor:pointer}
+  .antec{background:#9ec5fe!important}
+  tr:nth-child(even) td{background:#f0fdf4}
+</style>
+</head>
+<body class="bg-slate-100 text-slate-800">
+
+<div id="login" class="hidden min-h-screen flex items-center justify-center">
+  <button id="btnLogin" class="btn text-lg px-6 py-3">Entrar com Google</button>
+</div>
+
+<div id="app" class="hidden">
+  <header class="bg-green-800 text-white p-3 flex flex-wrap gap-2 items-center">
+    <b class="mr-auto">💰 Minhas Finanças</b>
+    <input type="month" id="mesSel" class="inp text-black">
+    <button id="btnSair" class="text-sm underline">Sair</button>
+  </header>
+  <nav class="flex overflow-x-auto bg-white shadow text-sm">
+    <button class="tab on px-4 py-2" data-tab="resumo">Resumo</button>
+    <button class="tab px-4 py-2" data-tab="fixas">Fixas</button>
+    <button class="tab px-4 py-2" data-tab="ress">Ressarcimentos</button>
+    <button class="tab px-4 py-2" data-tab="parc">Parceladas</button>
+    <button class="tab px-4 py-2" data-tab="arq">Arquivo</button>
+  </nav>
+
+  <main class="p-3 max-w-7xl mx-auto">
+    <!-- RESUMO -->
+    <section id="t-resumo" class="sec grid gap-3 md:grid-cols-2"></section>
+
+    <!-- FIXAS -->
+    <section id="t-fixas" class="sec hidden">
+      <form id="fFixa" class="bg-white p-3 rounded shadow flex flex-wrap gap-2 mb-3">
+        <input type="hidden" name="eid">
+        <input name="desc" placeholder="Descrição" class="inp flex-1" required>
+        <input name="valor" type="number" step="0.01" placeholder="Valor" class="inp w-28" required>
+        <input name="dia" type="number" min="1" max="31" placeholder="Dia venc." class="inp w-24">
+        <button class="btn">Salvar</button>
+      </form>
+      <div id="lFixas" class="bg-white p-3 rounded shadow overflow-x-auto"></div>
+    </section>
+
+    <!-- RESSARCIMENTOS -->
+    <section id="t-ress" class="sec hidden">
+      <form id="fRess" class="bg-white p-3 rounded shadow flex flex-wrap gap-2 mb-3">
+        <input type="hidden" name="eid">
+        <input name="data" type="date" class="inp" required>
+        <select name="tipo" class="inp">
+          <option>Alimentação</option><option>Hospedagem</option>
+          <option>Abastecimento</option><option>Pedágio</option>
+        </select>
+        <input name="desc" placeholder="Descrição / local" class="inp flex-1">
+        <input name="valor" type="number" step="0.01" placeholder="Valor" class="inp w-28" required>
+        <button class="btn">Salvar</button>
+      </form>
+      <div id="lRess" class="bg-white p-3 rounded shadow overflow-x-auto"></div>
+    </section>
+
+    <!-- PARCELADAS -->
+    <section id="t-parc" class="sec hidden">
+      <form id="fParc" class="bg-white p-3 rounded shadow flex flex-wrap gap-2 mb-3">
+        <input type="hidden" name="eid">
+        <input name="desc" placeholder="Compra" class="inp flex-1" required>
+        <input name="cartao" placeholder="Cartão" class="inp w-32" value="CAIXA">
+        <input name="total" type="number" step="0.01" placeholder="Valor total" class="inp w-32" required>
+        <input name="qtd" type="number" min="1" placeholder="Parcelas" class="inp w-24" required>
+        <label class="text-sm flex items-center gap-1">1ª parcela <input name="ini" type="month" class="inp" required></label>
+        <button class="btn">Salvar</button>
+        <button type="button" id="cancParc" class="text-sm underline hidden">cancelar edição</button>
+      </form>
+      <div class="flex flex-wrap gap-3 items-center mb-2 text-sm">
+        <span>Clique na parcela para marcar/desmarcar <span class="antec px-1">★ antecipada</span></span>
+        <button id="btnXls" class="btn ml-auto">⬇ Exportar Excel</button>
+      </div>
+      <div id="lParc" class="bg-white rounded shadow overflow-x-auto text-sm"></div>
+    </section>
+
+    <!-- ARQUIVO -->
+    <section id="t-arq" class="sec hidden">
+      <div id="lArq" class="bg-white p-3 rounded shadow overflow-x-auto text-sm"></div>
+    </section>
+  </main>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+// ====== COLE AQUI A CONFIGURAÇÃO DO SEU PROJETO FIREBASE ======
+
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyB4jufE-ow3ZRqzktdNcDCeRljNlJqIj1g",
+  authDomain: "controle-despesas-2026.firebaseapp.com",
+  projectId: "controle-despesas-2026",
+  storageBucket: "controle-despesas-2026.firebasestorage.app",
+  messagingSenderId: "111496542553",
+  appId: "1:111496542553:web:5c9e89992cb64cf5c07448",
+  measurementId: "G-7KZPBZ76CB"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+// ===============================================================
+
+const app = initializeApp(firebaseConfig), auth = getAuth(app), db = getFirestore(app);
+const $ = id => document.getElementById(id);
+let uid, unsubs = [];
+const S = { fixas: [], fpag: {}, ress: [], parc: [] };
+const col = n => collection(db, 'users', uid, n);
+const ref = (n, id) => doc(db, 'users', uid, n, id);
+
+// ---------- helpers ----------
+const brl = v => (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const r2 = v => Math.round(v * 100) / 100;
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const addM = (ym, n) => { const [y, m] = ym.split('-').map(Number); const d = new Date(y, m - 1 + n, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
+const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+const lbl = ym => { const [y, m] = ym.split('-'); return `${MESES[+m - 1]}/${y.slice(2)}`; };
+const mes = () => $('mesSel').value;
+const sum = (a, f) => a.reduce((s, x) => s + f(x), 0);
+const fv = (f, n) => f.elements[n].value;
+
+function parcelas(c) {
+  const v = r2(c.total / c.qtd);
+  return Array.from({ length: c.qtd }, (_, i) => {
+    const ym = addM(c.ini, i);
+    return { ym, n: i + 1, v: i === c.qtd - 1 ? r2(c.total - v * (c.qtd - 1)) : v, st: (c.st || {})[ym] || 'aberta' };
+  });
+}
+function proj() {
+  const ativas = S.parc.filter(c => !c.arq).sort((a, b) => a.desc.localeCompare(b.desc));
+  const ms = new Set();
+  ativas.forEach(c => parcelas(c).forEach(p => p.st !== 'paga' && ms.add(p.ym)));
+  return { ativas, meses: [...ms].sort() };
+}
+function totaisMes(m) {
+  let tot = 0, ant = 0;
+  S.parc.filter(c => !c.arq).forEach(c => {
+    const p = parcelas(c).find(x => x.ym === m);
+    if (p && p.st !== 'paga') { tot += p.v; if (p.st === 'antecipada') ant += p.v; }
+  });
+  return { tot: r2(tot), ant: r2(ant) };
+}
+
+// ---------- auth ----------
+$('btnLogin').onclick = () => signInWithPopup(auth, new GoogleAuthProvider());
+$('btnSair').onclick = () => signOut(auth);
+onAuthStateChanged(auth, u => {
+  unsubs.forEach(f => f()); unsubs = [];
+  $('login').classList.toggle('hidden', !!u);
+  $('app').classList.toggle('hidden', !u);
+  if (!u) return;
+  uid = u.uid;
+  ['fixas', 'ress', 'parc'].forEach(n => unsubs.push(onSnapshot(col(n), s => {
+    S[n] = s.docs.map(d => ({ id: d.id, ...d.data() })); render();
+  })));
+  unsubs.push(onSnapshot(col('fpag'), s => {
+    S.fpag = {}; s.docs.forEach(d => S.fpag[d.id] = d.data()); render();
+  }));
+});
+
+// ---------- tabs / mês ----------
+const hoje = new Date();
+$('mesSel').value = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
+$('mesSel').onchange = render;
+document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('.sec').forEach(s => s.classList.toggle('hidden', s.id !== 't-' + b.dataset.tab));
+});
+
+function render() { rResumo(); rFixas(); rRess(); rParc(); rArq(); }
+
+// ---------- RESUMO ----------
+function card(t, linhas) {
+  return `<div class="bg-white p-4 rounded shadow"><h3 class="font-bold text-green-800 mb-2">${t}</h3>
+  ${linhas.map(([k, v, cls]) => `<div class="flex justify-between ${cls || ''}"><span>${k}</span><b>${v}</b></div>`).join('')}</div>`;
+}
+function rResumo() {
+  const m = mes();
+  const fxTot = sum(S.fixas, f => f.valor);
+  const fxPag = sum(S.fixas.filter(f => S.fpag[`${f.id}_${m}`]), f => f.valor);
+  const { tot, ant } = totaisMes(m);
+  const rm = S.ress.filter(r => r.data.startsWith(m));
+  const saldoRess = sum(S.ress.filter(r => r.rec && !r.ret), r => r.valor);
+  $('t-resumo').innerHTML =
+    card(`Despesas fixas – ${lbl(m)}`, [['Total', brl(fxTot)], ['Pago', brl(fxPag)], ['Pendente', brl(fxTot - fxPag), 'text-red-600']]) +
+    card(`Parcelas – ${lbl(m)}`, [['Total do mês', brl(tot)], ['Antecipado (poupança)', brl(ant), 'text-blue-700'], ['A pagar com salário', brl(tot - ant)]]) +
+    card(`Ressarcimentos – ${lbl(m)}`, [['Lançado no mês', brl(sum(rm, r => r.valor))], ['Recebido no mês', brl(sum(rm.filter(r => r.rec), r => r.valor))], ['Saldo na poupança (geral)', brl(saldoRess), 'text-blue-700']]) +
+    card('🏦 Retirar da poupança', [['Parcelas antecipadas do mês', brl(ant)], ['Ressarcimentos não retirados', brl(saldoRess)], ['TOTAL', brl(ant + saldoRess), 'text-lg text-green-800 border-t mt-1 pt-1']]);
+}
+
+// ---------- FIXAS ----------
+$('fFixa').onsubmit = async e => {
+  e.preventDefault(); const f = e.target;
+  const d = { desc: fv(f, 'desc').trim(), valor: +fv(f, 'valor'), dia: +fv(f, 'dia') || null };
+  const id = fv(f, 'eid');
+  id ? await updateDoc(ref('fixas', id), d) : await addDoc(col('fixas'), d);
+  f.reset(); f.elements.eid.value = '';
+};
+function rFixas() {
+  const m = mes();
+  const l = [...S.fixas].sort((a, b) => (a.dia || 99) - (b.dia || 99));
+  $('lFixas').innerHTML = `<h3 class="font-bold mb-2">Pagamentos de ${lbl(m)}</h3>
+  <table class="w-full text-sm"><tr><th>Pago</th><th>Dia</th><th>Descrição</th><th>Valor</th><th></th></tr>
+  ${l.map(f => {
+    const pg = S.fpag[`${f.id}_${m}`];
+    return `<tr><td class="text-center"><input type="checkbox" data-fp="${f.id}" ${pg ? 'checked' : ''}></td>
+    <td>${f.dia || ''}</td><td class="${pg ? 'line-through text-slate-400' : ''}">${esc(f.desc)}</td><td>${brl(f.valor)}</td>
+    <td><button data-fe="${f.id}">✏️</button> <button data-fd="${f.id}">🗑️</button></td></tr>`;
+  }).join('')}
+  <tr class="font-bold"><td colspan="3">TOTAL</td><td>${brl(sum(l, f => f.valor))}</td><td></td></tr></table>`;
+}
+$('lFixas').onclick = async e => {
+  const t = e.target, m = mes(), f = $('fFixa');
+  if (t.dataset.fp) {
+    const k = `${t.dataset.fp}_${m}`;
+    t.checked ? await setDoc(ref('fpag', k), { pago: true, em: new Date().toISOString() }) : await deleteDoc(ref('fpag', k));
+  }
+  if (t.dataset.fe) {
+    const x = S.fixas.find(i => i.id === t.dataset.fe);
+    f.elements.eid.value = x.id; f.elements.desc.value = x.desc; f.elements.valor.value = x.valor; f.elements.dia.value = x.dia || '';
+    f.scrollIntoView();
+  }
+  if (t.dataset.fd && confirm('Excluir despesa fixa?')) await deleteDoc(ref('fixas', t.dataset.fd));
+};
+
+// ---------- RESSARCIMENTOS ----------
+$('fRess').onsubmit = async e => {
+  e.preventDefault(); const f = e.target;
+  const d = { data: fv(f, 'data'), tipo: fv(f, 'tipo'), desc: fv(f, 'desc').trim(), valor: +fv(f, 'valor') };
+  const id = fv(f, 'eid');
+  id ? await updateDoc(ref('ress', id), d) : await addDoc(col('ress'), { ...d, rec: false, ret: false });
+  f.reset(); f.elements.eid.value = '';
+};
+function rRess() {
+  const m = mes();
+  const l = S.ress.filter(r => r.data.startsWith(m)).sort((a, b) => a.data.localeCompare(b.data));
+  const tipos = ['Alimentação', 'Hospedagem', 'Abastecimento', 'Pedágio'];
+  $('lRess').innerHTML = `<h3 class="font-bold mb-2">Ressarcimentos de ${lbl(m)}</h3>
+  <div class="flex flex-wrap gap-3 mb-2 text-sm">${tipos.map(t => `<span class="bg-green-50 px-2 rounded">${t}: <b>${brl(sum(l.filter(r => r.tipo === t), r => r.valor))}</b></span>`).join('')}</div>
+  <table class="w-full text-sm"><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Valor</th><th>Recebido</th><th>Retirado</th><th></th></tr>
+  ${l.map(r => `<tr><td>${r.data.split('-').reverse().join('/')}</td><td>${r.tipo}</td><td>${esc(r.desc)}</td><td>${brl(r.valor)}</td>
+  <td class="text-center"><input type="checkbox" data-rf="rec" data-id="${r.id}" ${r.rec ? 'checked' : ''}></td>
+  <td class="text-center"><input type="checkbox" data-rf="ret" data-id="${r.id}" ${r.ret ? 'checked' : ''}></td>
+  <td><button data-re="${r.id}">✏️</button> <button data-rd="${r.id}">🗑️</button></td></tr>`).join('')}
+  <tr class="font-bold"><td colspan="3">TOTAL</td><td>${brl(sum(l, r => r.valor))}</td><td colspan="3"></td></tr></table>
+  <button id="retTodos" class="btn mt-3">Marcar recebidos do mês como retirados</button>`;
+}
+$('lRess').onclick = async e => {
+  const t = e.target, f = $('fRess');
+  if (t.dataset.rf) await updateDoc(ref('ress', t.dataset.id), { [t.dataset.rf]: t.checked });
+  if (t.dataset.re) {
+    const x = S.ress.find(i => i.id === t.dataset.re);
+    ['data', 'tipo', 'desc', 'valor'].forEach(k => f.elements[k].value = x[k]);
+    f.elements.eid.value = x.id; f.scrollIntoView();
+  }
+  if (t.dataset.rd && confirm('Excluir lançamento?')) await deleteDoc(ref('ress', t.dataset.rd));
+  if (t.id === 'retTodos') {
+    const l = S.ress.filter(r => r.data.startsWith(mes()) && r.rec && !r.ret);
+    if (l.length && confirm(`Retirar ${brl(sum(l, r => r.valor))} da poupança?`))
+      await Promise.all(l.map(r => updateDoc(ref('ress', r.id), { ret: true })));
+  }
+};
+
+// ---------- PARCELADAS ----------
+const fP = $('fParc');
+fP.onsubmit = async e => {
+  e.preventDefault();
+  const d = { desc: fv(fP, 'desc').trim(), cartao: fv(fP, 'cartao').trim(), total: +fv(fP, 'total'), qtd: +fv(fP, 'qtd'), ini: fv(fP, 'ini') };
+  const id = fv(fP, 'eid');
+  if (id) {
+    const old = S.parc.find(x => x.id === id), st = {};
+    parcelas({ ...d, st: old.st }).forEach(p => { if (p.st !== 'aberta') st[p.ym] = p.st; });
+    d.st = st; d.arq = parcelas(d).every(p => p.st === 'paga');
+    await updateDoc(ref('parc', id), d);
+  } else await addDoc(col('parc'), { ...d, st: {}, arq: false });
+  limparParc();
+};
+const limparParc = () => { fP.reset(); fP.elements.eid.value = ''; fP.elements.cartao.value = 'CAIXA'; $('cancParc').classList.add('hidden'); };
+$('cancParc').onclick = limparParc;
+
+function rParc() {
+  const { ativas, meses } = proj();
+  if (!ativas.length) { $('lParc').innerHTML = '<p class="p-3">Nenhuma compra parcelada em aberto.</p>'; return; }
+  const T = meses.map(totaisMes);
+  $('lParc').innerHTML = `<table>
+  <tr><th class="stk">Compra</th><th>Cartão</th>${meses.map(m => `<th>${lbl(m)}<br><button data-pay="${m}" class="text-xs bg-white text-green-800 rounded px-1">✓ pagar</button></th>`).join('')}<th>Ações</th></tr>
+  ${ativas.map(c => {
+    const ps = parcelas(c), pagas = ps.filter(p => p.st === 'paga').length;
+    return `<tr><td class="stk">${esc(c.desc)} <span class="text-xs text-slate-500">${pagas}/${c.qtd}</span></td><td>${esc(c.cartao)}</td>
+    ${meses.map(m => {
+      const p = ps.find(x => x.ym === m);
+      if (!p || p.st === 'paga') return '<td></td>';
+      const a = p.st === 'antecipada';
+      return `<td class="cell ${a ? 'antec' : ''}" data-c="${c.id}" data-m="${m}" title="Parcela ${p.n}/${c.qtd}">${a ? '★ ' : ''}${brl(p.v)}</td>`;
+    }).join('')}
+    <td><button data-pe="${c.id}">✏️</button> <button data-pd="${c.id}">🗑️</button></td></tr>`;
+  }).join('')}
+  <tr class="font-bold"><td class="stk">TOTAL DO MÊS</td><td></td>${T.map(t => `<td>${brl(t.tot)}</td>`).join('')}<td></td></tr>
+  <tr class="font-bold text-blue-800"><td class="stk">★ ANTECIPADO (poupança)</td><td></td>${T.map(t => `<td class="antec">${brl(t.ant)}</td>`).join('')}<td></td></tr>
+  <tr class="font-bold"><td class="stk">A PAGAR</td><td></td>${T.map(t => `<td>${brl(t.tot - t.ant)}</td>`).join('')}<td></td></tr>
+  </table>`;
+}
+$('lParc').onclick = async e => {
+  const t = e.target.closest('[data-c],[data-pay],[data-pe],[data-pd]'); if (!t) return;
+  if (t.dataset.c) {
+    const c = S.parc.find(x => x.id === t.dataset.c), st = { ...(c.st || {}) }, m = t.dataset.m;
+    st[m] = st[m] === 'antecipada' ? 'aberta' : 'antecipada';
+    await updateDoc(ref('parc', c.id), { st });
+  }
+  if (t.dataset.pay) {
+    const m = t.dataset.pay, { tot, ant } = totaisMes(m);
+    if (!confirm(`Marcar TODAS as parcelas de ${lbl(m)} como pagas?\nTotal: ${brl(tot)} (antecipado: ${brl(ant)})`)) return;
+    await Promise.all(S.parc.filter(c => !c.arq).map(c => {
+      const p = parcelas(c).find(x => x.ym === m);
+      if (!p || p.st === 'paga') return null;
+      const st = { ...(c.st || {}), [m]: 'paga' };
+      return updateDoc(ref('parc', c.id), { st, arq: parcelas({ ...c, st }).every(x => x.st === 'paga') });
+    }));
+  }
+  if (t.dataset.pe) {
+    const c = S.parc.find(x => x.id === t.dataset.pe);
+    ['desc', 'cartao', 'total', 'qtd', 'ini'].forEach(k => fP.elements[k].value = c[k]);
+    fP.elements.eid.value = c.id; $('cancParc').classList.remove('hidden'); fP.scrollIntoView();
+  }
+  if (t.dataset.pd && confirm('Excluir compra parcelada?')) await deleteDoc(ref('parc', t.dataset.pd));
+};
+
+// ---------- EXPORTAR EXCEL ----------
+$('btnXls').onclick = () => {
+  const { ativas, meses } = proj(), T = meses.map(totaisMes);
+  const tdN = (v, a, b) => `<td class="${a ? 'a' : 'n'}" x:num="${v}"${b ? ' style="font-weight:bold"' : ''}>${v}</td>`;
+  let h = `<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8"><style>
+  td{border:.5pt solid #ccc}.n{mso-number-format:"R\\$\\ \\#\\,\\#\\#0\\.00"}
+  .a{mso-number-format:"▲\\ R\\$\\ \\#\\,\\#\\#0\\.00";background:#9EC5FE;font-weight:bold}
+  .h{background:#548235;color:#fff;font-weight:bold}</style></head><body><table>
+  <tr><td class="h">Compra</td><td class="h">Cartão</td>${meses.map(m => `<td class="h">${lbl(m)}</td>`).join('')}</tr>`;
+  ativas.forEach(c => {
+    const ps = parcelas(c);
+    h += `<tr><td>${esc(c.desc)}</td><td>${esc(c.cartao)}</td>${meses.map(m => {
+      const p = ps.find(x => x.ym === m);
+      return (!p || p.st === 'paga') ? '<td></td>' : tdN(p.v, p.st === 'antecipada');
+    }).join('')}</tr>`;
+  });
+  h += `<tr><td><b>TOTAL DO MÊS</b></td><td></td>${T.map(t => tdN(t.tot, 0, 1)).join('')}</tr>
+  <tr><td><b>▲ ANTECIPADO (poupança)</b></td><td></td>${T.map(t => tdN(t.ant, 1)).join('')}</tr>
+  <tr><td><b>A PAGAR</b></td><td></td>${T.map(t => tdN(r2(t.tot - t.ant), 0, 1)).join('')}</tr>
+  <tr><td colspan="4"><i>Legenda: célula azul com ▲ = parcela paga antecipadamente (retirar da poupança)</i></td></tr>
+  </table></body></html>`;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\ufeff' + h], { type: 'application/vnd.ms-excel' }));
+  a.download = `parceladas_${mes()}.xls`; a.click();
+};
+
+// ---------- ARQUIVO ----------
+function rArq() {
+  const l = S.parc.filter(c => c.arq).sort((a, b) => b.ini.localeCompare(a.ini));
+  $('lArq').innerHTML = !l.length ? '<p>Nenhuma compra quitada ainda.</p>' :
+    `<table class="w-full"><tr><th>Compra</th><th>Cartão</th><th>Total</th><th>Parcelas</th><th>Período</th><th></th></tr>
+    ${l.map(c => `<tr><td>${esc(c.desc)}</td><td>${esc(c.cartao)}</td><td>${brl(c.total)}</td><td>${c.qtd}x</td>
+    <td>${lbl(c.ini)} – ${lbl(addM(c.ini, c.qtd - 1))}</td>
+    <td><button data-ar="${c.id}" class="underline">reabrir</button> <button data-ad="${c.id}">🗑️</button></td></tr>`).join('')}</table>`;
+}
+$('lArq').onclick = async e => {
+  const t = e.target;
+  if (t.dataset.ar && confirm('Reabrir todas as parcelas desta compra?')) await updateDoc(ref('parc', t.dataset.ar), { arq: false, st: {} });
+  if (t.dataset.ad && confirm('Excluir definitivamente?')) await deleteDoc(ref('parc', t.dataset.ad));
+};
+</script>
+</body>
+</html>
