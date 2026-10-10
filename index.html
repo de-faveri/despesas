@@ -88,7 +88,8 @@ service cloud.firestore {
         <input type="hidden" name="eid">
         <input name="desc" placeholder="Compra" class="inp flex-1" required>
         <input name="cartao" placeholder="Cartão" class="inp w-32" value="CAIXA">
-        <input name="total" type="number" step="0.01" placeholder="Valor total" class="inp w-32" required>
+        <select name="modo" class="inp"><option value="total">Valor total</option><option value="parc">Valor da parcela</option></select>
+        <input name="total" type="number" step="0.01" placeholder="Valor" class="inp w-32" required>
         <input name="qtd" type="number" min="1" placeholder="Parcelas" class="inp w-24" required>
         <label class="text-sm flex items-center gap-1">Data da compra <input name="data" type="date" class="inp" required></label>
         <label class="text-sm flex items-center gap-1">1ª parcela <input name="ini" type="month" class="inp" required></label>
@@ -144,10 +145,10 @@ const sum = (a, f) => a.reduce((s, x) => s + f(x), 0);
 const fv = (f, n) => f.elements[n].value;
 
 function parcelas(c) {
-  const v = r2(c.total / c.qtd);
+  const v = c.vp || r2(c.total / c.qtd);
   return Array.from({ length: c.qtd }, (_, i) => {
     const ym = addM(c.ini, i);
-    return { ym, n: i + 1, v: i === c.qtd - 1 ? r2(c.total - v * (c.qtd - 1)) : v, st: (c.st || {})[ym] || 'aberta' };
+    return { ym, n: i + 1, v: !c.vp && i === c.qtd - 1 ? r2(c.total - v * (c.qtd - 1)) : v, st: (c.st || {})[ym] || 'aberta' };
   });
 }
 function proj() {
@@ -301,7 +302,8 @@ const fP = $('fParc');
 fP.elements.data.onchange = () => { const d = fv(fP, 'data'); if (d) fP.elements.ini.value = addM(d.slice(0, 7), 1); };
 fP.onsubmit = async e => {
   e.preventDefault();
-  const d = { desc: fv(fP, 'desc').trim(), cartao: fv(fP, 'cartao').trim(), total: +fv(fP, 'total'), qtd: +fv(fP, 'qtd'), ini: fv(fP, 'ini'), data: fv(fP, 'data') };
+  const porParc = fv(fP, 'modo') === 'parc', val = +fv(fP, 'total'), qtd = +fv(fP, 'qtd');
+  const d = { desc: fv(fP, 'desc').trim(), cartao: fv(fP, 'cartao').trim(), total: porParc ? r2(val * qtd) : val, vp: porParc ? val : null, qtd, ini: fv(fP, 'ini'), data: fv(fP, 'data') };
   const id = fv(fP, 'eid');
   if (id) {
     const old = S.parc.find(x => x.id === id), st = {};
@@ -355,7 +357,9 @@ $('lParc').onclick = async e => {
   }
   if (t.dataset.pe) {
     const c = S.parc.find(x => x.id === t.dataset.pe);
-    ['desc', 'cartao', 'total', 'qtd', 'ini', 'data'].forEach(k => fP.elements[k].value = c[k] ?? '');
+    ['desc', 'cartao', 'qtd', 'ini', 'data'].forEach(k => fP.elements[k].value = c[k] ?? '');
+    fP.elements.modo.value = c.vp ? 'parc' : 'total';
+    fP.elements.total.value = c.vp || c.total;
     fP.elements.eid.value = c.id; $('cancParc').classList.remove('hidden'); fP.scrollIntoView();
   }
   if (t.dataset.pd && confirm('Excluir compra parcelada?')) await deleteDoc(ref('parc', t.dataset.pd));
