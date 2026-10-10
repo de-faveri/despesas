@@ -262,7 +262,9 @@ function rResumo() {
     card(`Despesas fixas – ${lbl(m)}`, [['Total', brl(fxTot)], ['Pago', brl(fxPag)], ['Pendente', brl(fxTot - fxPag), 'text-red-600']]) +
     card(`Parcelas – ${lbl(m)}`, [['Total do mês', brl(tot)], ['Antecipado (poupança)', brl(ant), 'text-blue-700'], ['A pagar com salário', brl(tot - ant)]]) +
     card(`Ressarcimentos – ${lbl(m)}`, [['Lançado no mês', brl(sum(rm, r => r.valor))], ['Recebido no mês', brl(sum(rm.filter(r => r.rec), r => r.valor))], ['Saldo na poupança (geral)', brl(saldoRess), 'text-blue-700']]) +
-    card('🏦 Retirar da poupança', [['Parcelas antecipadas do mês', brl(ant)], ['Ressarcimentos não retirados', brl(saldoRess)], ['TOTAL', brl(ant + saldoRess), 'text-lg text-green-800 border-t mt-1 pt-1']]);
+    card('🏦 Retirar da poupança', [['Parcelas antecipadas do mês', brl(ant)], ['Ressarcimentos não retirados', brl(saldoRess)], ['TOTAL', brl(ant + saldoRess), 'text-lg text-green-800 border-t mt-1 pt-1']]) +
+    card(`📊 Total geral – ${lbl(m)}`, [['Despesas fixas', brl(fxTot)], ['Parcelas', brl(tot)], ['Ressarcimentos', brl(ressMes)], ['TOTAL DO MÊS', brl(fxTot + tot + ressMes), 'text-lg text-green-800 border-t mt-1 pt-1']]) +
+    card('💳 Saldo devedor (todas as parcelas)', [['Compras em aberto', qtdAbertas], ['Total restante a pagar', brl(devedor), 'text-lg text-red-600 border-t mt-1 pt-1']]);
 }
 
 // ---------- FIXAS ----------
