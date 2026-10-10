@@ -45,6 +45,12 @@ service cloud.firestore {
   .antec{background:#3a3a1e!important;color:#facc15!important;font-weight:600}
   tr.font-bold td{border-top:2px solid #38bdf8}
   button[data-pay]{background:#0f1a30!important;color:#38bdf8!important;border:1px solid #2a3a5c}
+  .cat{background:#0f1a30;border:1px solid #1e2b47;border-radius:8px;margin-bottom:10px;overflow:hidden}
+  .cat-h{display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;background:#16233f;font-weight:600}
+  .cat-h:hover{background:#1b2a4a}
+  .cat.fech table{display:none}
+  .cat.fech .seta{transform:rotate(-90deg)}
+  .seta{transition:transform .15s;color:#38bdf8}
 </style>
 </head>
 <body class="bg-slate-900 text-slate-100">
@@ -316,19 +322,29 @@ $('fRess').onsubmit = async e => {
 function rRess() {
   const m = mes();
   const l = S.ress.filter(r => r.data.startsWith(m)).sort((a, b) => a.data.localeCompare(b.data));
-  const tipos = ['Alimentação', 'Hospedagem', 'Abastecimento', 'Pedágio'];
-  $('lRess').innerHTML = `<h3 class="font-bold mb-2">Ressarcimentos de ${lbl(m)}</h3>
-  <div class="flex flex-wrap gap-3 mb-2 text-sm">${tipos.map(t => `<span class="bg-green-50 px-2 rounded">${t}: <b>${brl(sum(l.filter(r => r.tipo === t), r => r.valor))}</b></span>`).join('')}</div>
-  <table class="w-full text-sm"><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Valor</th><th>Recebido</th><th>Retirado</th><th></th></tr>
-  ${l.map(r => `<tr><td>${r.data.split('-').reverse().join('/')}</td><td>${r.tipo}</td><td>${esc(r.desc)}</td><td>${brl(r.valor)}</td>
-  <td class="text-center"><input type="checkbox" data-rf="rec" data-id="${r.id}" ${r.rec ? 'checked' : ''}></td>
-  <td class="text-center"><input type="checkbox" data-rf="ret" data-id="${r.id}" ${r.ret ? 'checked' : ''}></td>
-  <td><button data-re="${r.id}">✏️</button> <button data-rd="${r.id}">🗑️</button></td></tr>`).join('')}
-  <tr class="font-bold"><td colspan="3">TOTAL</td><td>${brl(sum(l, r => r.valor))}</td><td colspan="3"></td></tr></table>
-  <button id="retTodos" class="btn mt-3">Marcar recebidos do mês como retirados</button>`;
+  const ICO = { 'Alimentação': '🍽️', 'Hospedagem': '🏨', 'Abastecimento': '⛽', 'Pedágio': '🛣️' };
+  const tipos = [...new Set([...Object.keys(ICO), ...l.map(r => r.tipo)])].filter(t => l.some(r => r.tipo === t));
+  $('lRess').innerHTML = `<h3 class="font-bold mb-2">Ressarcimentos de ${lbl(m)} · <span class="text-green-800">${brl(sum(l, r => r.valor))}</span></h3>
+  ${!l.length ? '<p class="text-slate-400">Nenhum lançamento neste mês.</p>' : tipos.map(t => {
+    const g = l.filter(r => r.tipo === t);
+    return `<div class="cat${RFECH.has(t) ? ' fech' : ''}">
+    <div class="cat-h" data-cat="${esc(t)}"><span class="seta">▼</span>${ICO[t] || '📄'} ${esc(t)}
+      <span class="text-xs text-slate-400">${g.length} lançamento(s)</span>
+      <span class="ml-auto text-green-800">${brl(sum(g, r => r.valor))}</span></div>
+    <table class="w-full text-sm"><tr><th>Data</th><th>Descrição</th><th>Valor</th><th>Recebido</th><th>Retirado</th><th></th></tr>
+    ${g.map(r => `<tr><td>${r.data.split('-').reverse().join('/')}</td><td>${esc(r.desc)}</td><td>${brl(r.valor)}</td>
+    <td class="text-center"><input type="checkbox" data-rf="rec" data-id="${r.id}" ${r.rec ? 'checked' : ''}></td>
+    <td class="text-center"><input type="checkbox" data-rf="ret" data-id="${r.id}" ${r.ret ? 'checked' : ''}></td>
+    <td><button data-re="${r.id}">✏️</button> <button data-rd="${r.id}">🗑️</button></td></tr>`).join('')}
+    </table></div>`;
+  }).join('')}
+  <button id="retTodos" class="btn mt-2">Marcar recebidos do mês como retirados</button>`;
 }
+const RFECH = new Set();
 $('lRess').onclick = async e => {
   const t = e.target, f = $('fRess');
+  const ch = t.closest('[data-cat]');
+  if (ch) { const c = ch.dataset.cat; RFECH.has(c) ? RFECH.delete(c) : RFECH.add(c); ch.parentElement.classList.toggle('fech'); return; }
   if (t.dataset.rf) await updateDoc(ref('ress', t.dataset.id), { [t.dataset.rf]: t.checked });
   if (t.dataset.re) {
     const x = S.ress.find(i => i.id === t.dataset.re);
