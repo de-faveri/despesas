@@ -101,6 +101,21 @@ service cloud.firestore {
         <input name="valor" type="number" step="0.01" placeholder="Valor" class="inp w-28" required>
         <button class="btn">Salvar</button>
       </form>
+      <div id="pedBox" class="bg-white p-3 rounded shadow mb-3">
+        <div class="flex flex-wrap gap-2 items-center">
+          <b class="text-green-800 mr-2">🛣️ Pedágios do dia</b>
+          <input type="date" id="pedData" class="inp">
+          <input id="pedDesc" placeholder="Praça (opcional)" class="inp flex-1">
+          <input id="pedVal" type="number" step="0.01" placeholder="Valor + Enter" class="inp w-36">
+          <button id="pedAdd" class="btn">+</button>
+        </div>
+        <div id="pedFav" class="flex flex-wrap gap-2 mt-2 text-xs"></div>
+        <div id="pedLista" class="flex flex-wrap gap-2 mt-2 text-sm"></div>
+        <div class="flex items-center gap-3 mt-2">
+          <span>Total: <b id="pedTot" class="text-green-800">R$ 0,00</b></span>
+          <button id="pedSalvar" class="btn ml-auto">Salvar pedágios</button>
+        </div>
+      </div>
       <div id="lRess" class="bg-white p-3 rounded shadow overflow-x-auto"></div>
     </section>
 
@@ -223,7 +238,7 @@ document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
   document.querySelectorAll('.sec').forEach(s => s.classList.toggle('hidden', s.id !== 't-' + b.dataset.tab));
 });
 
-function render() { rResumo(); rFixas(); rRess(); rParc(); rArq(); }
+function render() { rResumo(); rFixas(); rRess(); rPed(); rParc(); rArq(); }
 
 // ---------- RESUMO ----------
 function card(t, linhas) {
@@ -325,6 +340,42 @@ $('lRess').onclick = async e => {
     const l = S.ress.filter(r => r.data.startsWith(mes()) && r.rec && !r.ret);
     if (l.length && confirm(`Retirar ${brl(sum(l, r => r.valor))} da poupança?`))
       await Promise.all(l.map(r => updateDoc(ref('ress', r.id), { ret: true })));
+  }
+};
+
+// ---------- PEDÁGIOS RÁPIDOS ----------
+let PED = [];
+$('pedData').value = new Date().toLocaleDateString('sv-SE');
+function rPed() {
+  const g = {};
+  S.ress.filter(r => r.tipo === 'Pedágio').forEach(r => {
+    const k = `${r.desc || ''}|${r.valor}`; g[k] = (g[k] || 0) + 1;
+  });
+  const top = Object.entries(g).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  $('pedFav').innerHTML = top.length ? '<span class="text-slate-400 self-center">Mais usados:</span>' + top.map(([k]) => {
+    const [d, v] = k.split('|');
+    return `<button class="nav-m" data-pf="${esc(k)}">${esc(d) || 'Pedágio'} · ${brl(+v)}</button>`;
+  }).join('') : '';
+  $('pedLista').innerHTML = PED.map((p, i) => `<span class="bg-green-50 px-2 py-1 rounded">${esc(p.desc) || 'Pedágio'} <b>${brl(p.valor)}</b> <button data-px="${i}" class="text-red-600 ml-1">✕</button></span>`).join('');
+  $('pedTot').textContent = brl(sum(PED, p => p.valor));
+  $('pedSalvar').textContent = PED.length ? `Salvar ${PED.length} pedágio(s)` : 'Salvar pedágios';
+}
+const pedAdd = () => {
+  const v = +$('pedVal').value; if (!v) return;
+  PED.push({ desc: $('pedDesc').value.trim(), valor: r2(v) });
+  $('pedVal').value = ''; $('pedDesc').value = ''; $('pedDesc').focus(); rPed();
+};
+$('pedAdd').onclick = pedAdd;
+$('pedVal').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); pedAdd(); } };
+$('pedBox').onclick = async e => {
+  const t = e.target;
+  if (t.dataset.pf) { const [d, v] = t.dataset.pf.split('|'); PED.push({ desc: d, valor: +v }); rPed(); }
+  if (t.dataset.px) { PED.splice(+t.dataset.px, 1); rPed(); }
+  if (t.id === 'pedSalvar') {
+    const data = $('pedData').value;
+    if (!PED.length || !data) return alert('Informe a data e ao menos um pedágio.');
+    await Promise.all(PED.map(p => addDoc(col('ress'), { data, tipo: 'Pedágio', desc: p.desc, valor: p.valor, rec: false, ret: false })));
+    PED = []; rPed();
   }
 };
 
